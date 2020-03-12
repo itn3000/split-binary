@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate encoding_rs;
 
 use clap::{App, Arg, SubCommand};
 use std::io::{Read, Write};
@@ -47,16 +48,18 @@ struct LineOptions {
     pub input: Option<String>,
     pub output: Option<String>,
     pub prefix: Option<String>,
+    pub encoding: Option<String>,
 }
 
 impl LineOptions {
-    pub fn new(max_lines: u64, max_chars: Option<u64>, input: Option<String>, output: Option<String>, prefix: Option<String>) -> LineOptions {
+    pub fn new(max_lines: u64, max_chars: Option<u64>, input: Option<String>, output: Option<String>, prefix: Option<String>, encoding: Option<String>) -> LineOptions {
         LineOptions {
             max_lines: max_lines,
             max_chars: max_chars,
             input: input,
             output: output,
-            prefix: prefix
+            prefix: prefix,
+            encoding: encoding,
         }
     }
     pub fn from_arg_matches(matches: &clap::ArgMatches) -> Result<LineOptions, Errors> {
@@ -78,7 +81,8 @@ impl LineOptions {
         let prefix = matches.value_of("prefix").and_then(|v| Some(String::from(v)));
         let input = matches.value_of("input").and_then(|v| Some(String::from(v)));
         let output = matches.value_of("output").and_then(|v| Some(String::from(v)));
-        Ok(Self::new(max_size, max_chars, input, output, prefix))
+        let encoding = matches.value_of("encoding").and_then(|v| Some(String::from(v)));
+        Ok(Self::new(max_size, max_chars, input, output, prefix, encoding))
     }
 }
 
@@ -275,6 +279,7 @@ fn create_text_subcommand<'a, 'b>() -> App<'a, 'b> {
             .about("split by text")
             .arg(Arg::with_name("max-lines").alias("m").required(true).help("max line number per file"))
             .arg(Arg::with_name("max-chars").long("max-chars").takes_value(true).help("max characters per line"))
+            .arg(Arg::with_name("encoding").short("e").long("encoding").takes_value(true).help("input text encoding(default: utf-8)"))
             .arg(create_input_option())
             .arg(create_output_option())
             .arg(create_prefix_option())
