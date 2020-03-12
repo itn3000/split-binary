@@ -157,6 +157,13 @@ fn split_text(opts: &LineOptions) -> Result<(), Errors> {
         Some(v) => std::path::PathBuf::from_str(v.as_str()).unwrap(),
         None => std::env::current_dir().or_else(|e| Err(Errors::from_io(&e, "getting output_directory")))?
     };
+    let decoder = match &opts.encoding {
+        Some(v) => match encoding_rs::Encoding::for_label(v.as_bytes()) {
+            Some(enc) => enc.new_decoder(),
+            None => return Err(Errors::Arg(ArgumentError::new("encoding", &format!("invalid encoding name:{}", v))))
+        },
+        None => encoding_rs::UTF_8.new_decoder()
+    };
     ensure_dir(&output_directory)?;
     let mut output_file_path = std::path::PathBuf::from(output_directory);
     let mut index = 0;
