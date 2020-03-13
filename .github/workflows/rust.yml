@@ -16,7 +16,7 @@ jobs:
           - "bsp"
           - "bsp.exe"
         exclude:
-          - os: "windows"
+          - os: "windows-2019"
             binname: "bsp"
           - os: "ubuntu-18.04"
             binname: "bsp.exe"
@@ -34,5 +34,11 @@ jobs:
         with:
           name: "binary-${{ matrix.os }}"
           path: "target/release/${{ matrix.binname }}"
+      - name: "collect-pdb"
+        uses: "actions/upload-artifact@v1"
+        with:
+          name: "pdb-${{ matrix.os }}"
+          path: "target/release/bsp.pdb"
+        if: matrix.os == windows-2019
         
     
