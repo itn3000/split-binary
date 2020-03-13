@@ -219,7 +219,6 @@ fn rolling_file(index: &mut i32, prefix: &str, output_file_path: &mut std::path:
 }
 
 fn is_line_ending(s: &str) -> bool {
-    println!("{:?}, {}", s.chars(), s == "\r" || s == "\n" || s == "\r\n");
     s == "\r" || s == "\n" || s == "\r\n"
 }
 
@@ -246,7 +245,6 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
         Some(v) => (v, true),
         None => (0, false)
     };
-    // let mut output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::from_io(&e, "opening output file")))?;
     let mut output_file = open_file(index, &prefix, &mut output_file_path)?;
     let mut buf = [0u8;1024];
     let mut readoffset = 0;
@@ -278,7 +276,6 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
                         if availablelines == 0 {
                             output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
                         }
-                        println!("c = {}, len = {}, {:?}", c, strbuf.len(), strbuf.chars());
                         wbuf.reserve(strbuf.len());
                         let (_, _, _) = encoder.encode_from_utf8_to_vec(&strbuf, &mut wbuf, false);
                         output_file.write(&wbuf).or_else(|e| Err(Errors::from_io(&e, "writing to output file")))?;
@@ -292,7 +289,6 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
                     }
                 }
                 if strbuf.len() != 0 && !is_line_ending(&strbuf) {
-                    println!("writing remaining buffer: {}", availablelines);
                     if availablelines == 0 {
                         output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
                     }
@@ -300,7 +296,6 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
                     let (_, _, _) = encoder.encode_from_utf8_to_vec(&strbuf, &mut wbuf, false);
                     output_file.write(&wbuf).or_else(|e| Err(Errors::from_io(&e, "writing to output file")))?;
                     if is_last_newline {
-                        println!("is_last_newline {:?}, {}", strbuf.chars(), availablelines);
                         availablelines -= 1;
                     }
                     wbuf.clear();
@@ -309,11 +304,6 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
             } else {
                 if availablelines == 0 {
                     output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
-                    // index += 1;
-                    // output_file_path.set_file_name(format!("{}.{}", prefix, index));
-                    // // output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
-                    // output_file = open_file(index, &prefix, &mut output_file_path)?;
-                    // availablelines = opts.max_lines;
                 }
                 wbuf.reserve(line.len());
                 let (_, _, _) = encoder.encode_from_utf8_to_vec(&line, &mut wbuf, false);
@@ -356,11 +346,6 @@ fn split_text(opts: &LineOptions) -> Result<(), Errors> {
         }
         if availablelines == 0 {
             output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
-            // index += 1;
-            // output_file_path.set_file_name(format!("{}.{}", prefix, index));
-            // // output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
-            // output_file = open_file(index, &prefix, &mut output_file_path)?;
-            // availablelines = opts.max_lines;
         }
         if is_max_chars_set {
             let mut offset = 0;
@@ -406,7 +391,6 @@ fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
         if bytesread == 0 {
             break;
         }
-        println!("bytesread: {}", bytesread);
         let mut remaining = bytesread;
         while remaining > 0 {
             let bytesavailable = std::cmp::min(remaining as usize, available as usize);
@@ -415,12 +399,7 @@ fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
             available -= bytesavailable as u64;
             if available == 0 && remaining != 0 {
                 output_file = rolling_file(&mut file_index, &prefix, &mut output_file_path, &mut available, opts.max_size)?;
-                // file_index += 1;
-                // output_file_path.set_file_name(format!("{}.{}", prefix, file_index));
-                // output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::from_io(&e, "creating new output file")))?;
-                // available = opts.max_size;
             }
-            println!("remaining: {}, bytesavailable: {}", remaining, bytesavailable);
         }
     }
     Ok(())
