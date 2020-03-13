@@ -12,25 +12,25 @@ jobs:
           - "windows-2019"
           - "ubuntu-18.04"
           - "macos-latest"
-        extension:
-          - ""
-          - ".exe"
+        binname:
+          - "bsp"
+          - "bsp.exe"
         exclude:
           - os: "windows"
-            extension: ""
+            binname: "bsp"
           - os: "ubuntu-18.04"
-            extension: ".exe"
+            binname: "bsp.exe"
           - os: "macos-latest"
-            extension: ".exe"
+            binname: "bsp.exe"
     runs-on: "${{ matrix.os }}"
     name: "build binary"
     steps:
       - name: "build-release-binary"
         run: cargo build --release
       - name: "collect-binary"
-        uses: "actions/upload-artifact@1"
+        uses: "actions/upload-artifact@v1"
         with:
-          name: "binary-${{matrix.os}}"
-          path: "target/release/bsp${{matrix.extension}}"
+          name: "binary-${{ matrix.os }}"
+          path: "target/release/${{ matrix.binname }}"
         
     
