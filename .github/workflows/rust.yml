@@ -39,6 +39,6 @@ jobs:
         with:
           name: "pdb-${{ matrix.os }}"
           path: "target/release/bsp.pdb"
-        if: matrix.os == windows-2019
+        if: matrix.os == 'windows-2019'
         
     
