@@ -16,6 +16,11 @@ struct BinaryOptions {
     pub prefix: Option<String>,
 }
 
+#[cfg(windows)]
+const LINE_ENDING: &'static str = "\r\n";
+#[cfg(not(windows))]
+const LINE_ENDING: &'static str = "\n";
+
 impl BinaryOptions {
     pub fn new(max_size: u64, input: Option<String>, output: Option<String>, prefix: Option<String>) -> BinaryOptions {
         BinaryOptions {
@@ -194,6 +199,30 @@ fn get_lines_from_buf(decoder: &mut Decoder, bytes: &[u8], is_cr: bool) -> Resul
     return Ok((readchars, lines, is_cr_found));
 }
 
+fn open_file(index: i32, prefix: &str, output_file_path: &mut std::path::PathBuf) -> Result<std::fs::File, Errors> {
+    output_file_path.set_file_name(format!("{}.{}", prefix, index));
+    let output_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&output_file_path).or_else(|e| Err(Errors::from_io(&e, "in opening file")))?;
+    output_file.set_len(0).or_else(|e| Err(Errors::from_io(&e, "truncating file")))?;
+    Ok(output_file)
+}
+
+fn rolling_file(index: &mut i32, prefix: &str, output_file_path: &mut std::path::PathBuf, availablelines: &mut u64, max_lines: u64) -> Result<std::fs::File, Errors> {
+    *index += 1;
+    output_file_path.set_file_name(format!("{}.{}", prefix, index));
+    // output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
+    let output_file = open_file(*index, &prefix, output_file_path)?;
+    *availablelines = max_lines;
+    Ok(output_file)
+}
+
+fn is_line_ending(s: &str) -> bool {
+    println!("{:?}, {}", s.chars(), s == "\r" || s == "\n" || s == "\r\n");
+    s == "\r" || s == "\n" || s == "\r\n"
+}
+
 fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
     let mut input = get_file_or_stdin(&opts.input)?;
     let mut availablelines = opts.max_lines;
@@ -217,15 +246,12 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
         Some(v) => (v, true),
         None => (0, false)
     };
-    let mut output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::from_io(&e, "opening output file")))?;
+    // let mut output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::from_io(&e, "opening output file")))?;
+    let mut output_file = open_file(index, &prefix, &mut output_file_path)?;
     let mut buf = [0u8;1024];
-    let mut u8buf: Vec<u8> = Vec::new();
-    let mut strbuf = String::new();
     let mut readoffset = 0;
     let mut wbuf: Vec<u8> = Vec::new();
-    strbuf.reserve(1024);
     wbuf.reserve(4096);
-    u8buf.resize(4096, 0);
     let mut is_cr = false;
     loop {
         let bytesread = input.read(&mut buf[readoffset..]).or_else(|e| Err(Errors::from_io(&e, "reading file")))?;
@@ -241,29 +267,63 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
             buf.clone_from_slice(&tmp);
             readoffset = bytesread + readoffset - readfrombuf;
         }
-        // &buf[0..readfrombuf - bytesread - readoffset].clone_from_slice(&buf[readfrombuf..bytesread + readoffset]);
-        // readoffset = readfrombuf - bytesread - readoffset;
         for (line, is_last_newline) in lines {
-            if availablelines == 0 {
-                index += 1;
-                output_file_path.set_file_name(format!("{}.{}", prefix, index));
-                output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
-                availablelines = opts.max_lines;
+            if is_max_chars_set {
+                let mut strbuf = String::new();
+                let mut charcount = 0 as usize;
+                for c in line.chars() {
+                    strbuf.push(c);
+                    charcount += 1;
+                    if charcount >= max_chars as usize {
+                        if availablelines == 0 {
+                            output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
+                        }
+                        println!("c = {}, len = {}, {:?}", c, strbuf.len(), strbuf.chars());
+                        wbuf.reserve(strbuf.len());
+                        let (_, _, _) = encoder.encode_from_utf8_to_vec(&strbuf, &mut wbuf, false);
+                        output_file.write(&wbuf).or_else(|e| Err(Errors::from_io(&e, "writing to output file")))?;
+                        if !strbuf.ends_with("\r") && !strbuf.ends_with("\n") {
+                            output_file.write(LINE_ENDING.as_bytes()).or_else(|e| Err(Errors::from_io(&e, "writing newline")))?;
+                        }
+                        availablelines -= 1;
+                        wbuf.clear();
+                        strbuf.clear();
+                        charcount = 0;
+                    }
+                }
+                if strbuf.len() != 0 && !is_line_ending(&strbuf) {
+                    println!("writing remaining buffer: {}", availablelines);
+                    if availablelines == 0 {
+                        output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
+                    }
+                    wbuf.reserve(strbuf.len());
+                    let (_, _, _) = encoder.encode_from_utf8_to_vec(&strbuf, &mut wbuf, false);
+                    output_file.write(&wbuf).or_else(|e| Err(Errors::from_io(&e, "writing to output file")))?;
+                    if is_last_newline {
+                        println!("is_last_newline {:?}, {}", strbuf.chars(), availablelines);
+                        availablelines -= 1;
+                    }
+                    wbuf.clear();
+                    strbuf.clear();
+                }
+            } else {
+                if availablelines == 0 {
+                    output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
+                    // index += 1;
+                    // output_file_path.set_file_name(format!("{}.{}", prefix, index));
+                    // // output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
+                    // output_file = open_file(index, &prefix, &mut output_file_path)?;
+                    // availablelines = opts.max_lines;
+                }
+                wbuf.reserve(line.len());
+                let (_, _, _) = encoder.encode_from_utf8_to_vec(&line, &mut wbuf, false);
+                output_file.write(&wbuf).or_else(|e| Err(Errors::from_io(&e, "writing to output file")))?;
+                if is_last_newline {
+                    availablelines -= 1;
+                }
+                wbuf.clear();
             }
-            wbuf.reserve(line.len());
-            let (_, _, _) = encoder.encode_from_utf8_to_vec(&line, &mut wbuf, false);
-            output_file.write(&wbuf).or_else(|e| Err(Errors::from_io(&e, "writing to output file")))?;
-            if is_last_newline {
-                availablelines -= 1;
-            }
-            wbuf.clear();
         }
-        // if availablelines == 0 {
-        //     index += 1;
-        //     output_file_path.set_file_name(format!("{}.{}", prefix, index));
-        //     output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
-        //     availablelines = opts.max_lines;
-        // }
     }
     Ok(())
 }
@@ -288,17 +348,19 @@ fn split_text(opts: &LineOptions) -> Result<(), Errors> {
         Some(v) => (v, true),
         None => (0, false)
     };
-    let mut output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::from_io(&e, "opening output file")))?;
+    let mut output_file = open_file(index, &prefix, &mut output_file_path)?;
     loop {
         let read = reader.read_line(&mut line).or_else(|e| Err(Errors::from_io(&e, "reading line")))?;
         if read == 0 {
             break;
         }
         if availablelines == 0 {
-            index += 1;
-            output_file_path.set_file_name(format!("{}.{}", prefix, index));
-            output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
-            availablelines = opts.max_lines;
+            output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
+            // index += 1;
+            // output_file_path.set_file_name(format!("{}.{}", prefix, index));
+            // // output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
+            // output_file = open_file(index, &prefix, &mut output_file_path)?;
+            // availablelines = opts.max_lines;
         }
         if is_max_chars_set {
             let mut offset = 0;
@@ -308,10 +370,7 @@ fn split_text(opts: &LineOptions) -> Result<(), Errors> {
                 offset += wlen;
                 availablelines -= 1;
                 if availablelines == 0 {
-                    index += 1;
-                    output_file_path.set_file_name(format!("{}.{}", prefix, index));
-                    output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
-                    availablelines = opts.max_lines;
+                    output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
                 }
                 if offset >= line.len() {
                     break;
@@ -355,10 +414,11 @@ fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
             remaining -= bytesavailable;
             available -= bytesavailable as u64;
             if available == 0 && remaining != 0 {
-                file_index += 1;
-                output_file_path.set_file_name(format!("{}.{}", prefix, file_index));
-                output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::from_io(&e, "creating new output file")))?;
-                available = opts.max_size;
+                output_file = rolling_file(&mut file_index, &prefix, &mut output_file_path, &mut available, opts.max_size)?;
+                // file_index += 1;
+                // output_file_path.set_file_name(format!("{}.{}", prefix, file_index));
+                // output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::from_io(&e, "creating new output file")))?;
+                // available = opts.max_size;
             }
             println!("remaining: {}, bytesavailable: {}", remaining, bytesavailable);
         }

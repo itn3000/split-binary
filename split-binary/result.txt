@@ -1,0 +1,45 @@
+BinaryOptions { max_size: 1024, delimiter: None, input: Some("..\\tmp\\largefile.txt"), output: Some("..\\tmp\\large2"), prefix: None }
+bytesread: 1024
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 1024
+remaining: 1024, bytesavailable: 0
+remaining: 0, bytesavailable: 1024
+bytesread: 938
+remaining: 938, bytesavailable: 0
+remaining: 0, bytesavailable: 938
