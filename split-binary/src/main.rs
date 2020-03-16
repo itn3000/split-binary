@@ -513,7 +513,7 @@ fn create_text_subcommand<'a, 'b>() -> App<'a, 'b> {
 
 fn main() -> Result<(), Errors>{
     let app = App::new("bsp")
-        .version("0.1.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("itn3000")
         .about("binary/text splitter")
         .subcommand(create_binary_subcommand())
