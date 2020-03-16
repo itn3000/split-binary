@@ -20,9 +20,9 @@ jobs:
           - "bsp"
           - "bsp.exe"
         triplet:
-          - "${{ env.WIN64_TRIPLET }}"
-          - "${{ env.LINUX64_TRIPLET }}"
-          - "${{ env.MAC64_TRIPLET }}"
+          - "${{ WIN64_TRIPLET }}"
+          - "${{ LINUX64_TRIPLET }}"
+          - "${{ MAC64_TRIPLET }}"
         exclude:
           - os: "windows-2019"
             binname: "bsp"
