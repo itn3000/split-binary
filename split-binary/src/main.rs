@@ -4,16 +4,19 @@ extern crate encoding_rs;
 use clap::{App, Arg, SubCommand};
 use std::io::{Read, Write};
 use std::str::FromStr;
-use std::io::BufRead;
 use encoding_rs::{Decoder};
+use std::iter::Iterator;
+use std::iter::FromIterator;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct BinaryOptions {
     pub max_size: u64,
     pub delimiter: Option<u8>,
     pub input: Option<String>,
     pub output: Option<String>,
     pub prefix: Option<String>,
+    pub extra_suffix: Option<String>,
+    pub is_numerical_suffix: bool,
 }
 
 #[cfg(windows)]
@@ -22,14 +25,33 @@ const LINE_ENDING: &'static str = "\r\n";
 const LINE_ENDING: &'static str = "\n";
 
 impl BinaryOptions {
-    pub fn new(max_size: u64, input: Option<String>, output: Option<String>, prefix: Option<String>) -> BinaryOptions {
-        BinaryOptions {
-            max_size: max_size,
-            delimiter: None,
-            input: input,
-            output: output,
-            prefix: prefix,
-        }
+    pub fn new(max_size: u64) -> BinaryOptions {
+        let mut ret = Self::default();
+        ret.max_size = max_size;
+        ret
+    }
+    fn default() -> Self {
+        Default::default()
+    }
+    pub fn with_input(mut self, s: Option<&str>) -> Self {
+        self.input = s.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_output(mut self, s: Option<&str>) -> Self {
+        self.output = s.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_prefix(mut self, s: Option<&str>) -> Self {
+        self.prefix = s.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_extra_suffix(mut self, s: Option<&str>) -> Self {
+        self.extra_suffix = s.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_is_numerical_suffix(mut self, b: bool) -> Self {
+        self.is_numerical_suffix = b;
+        self
     }
     fn from_arg_matches(matches: &clap::ArgMatches) -> Result<BinaryOptions, Errors> {
         let max_size = match matches.value_of("max-size") {
@@ -39,15 +61,17 @@ impl BinaryOptions {
             },
             None => return Err(Errors::Arg(ArgumentError::new("max-size", "max-size is empty")))
         };
-        let prefix = matches.value_of("prefix").and_then(|v| Some(String::from(v)));
-        let input = matches.value_of("input").and_then(|v| Some(String::from(v)));
-        let output = matches.value_of("output").and_then(|v| Some(String::from(v)));
-        Ok(Self::new(max_size, input, output, prefix))
+        return Ok(Self::new(max_size)
+            .with_input(matches.value_of("input"))
+            .with_output(matches.value_of("output"))
+            .with_prefix(matches.value_of("prefix"))
+            .with_extra_suffix(matches.value_of("extra-suffix"))
+            .with_is_numerical_suffix(matches.is_present("numerical-suffix")));
     }
     
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct LineOptions {
     pub max_lines: u64,
     pub max_chars: Option<u64>,
@@ -55,40 +79,70 @@ struct LineOptions {
     pub output: Option<String>,
     pub prefix: Option<String>,
     pub encoding: Option<String>,
+    pub is_numerical_suffix: bool,
+    pub extra_suffix: Option<String>
 }
 
 impl LineOptions {
-    pub fn new(max_lines: u64, max_chars: Option<u64>, input: Option<String>, output: Option<String>, prefix: Option<String>, encoding: Option<String>) -> LineOptions {
-        LineOptions {
-            max_lines: max_lines,
-            max_chars: max_chars,
-            input: input,
-            output: output,
-            prefix: prefix,
-            encoding: encoding,
+    pub fn new(max_lines: u64) -> Self {
+        let mut ret = Self::default();
+        ret.max_lines = max_lines;
+        ret
+    }
+    fn default() -> Self {
+        Default::default()
+    }
+    pub fn with_max_chars(mut self, max_chars: Option<u64>) -> Self {
+        self.max_chars = max_chars;
+        self
+    }
+    pub fn with_prefix(mut self, prefix: Option<&str>) -> Self {
+        self.prefix = prefix.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_input(mut self, s: Option<&str>) -> Self {
+        self.input = s.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_output(mut self, s: Option<&str>) -> Self {
+        self.output = s.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_encoding(mut self, s: Option<&str>) -> Self {
+        self.encoding = s.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_extra_suffix(mut self, s: Option<&str>) -> Self {
+        self.extra_suffix = s.and_then(|v| Some(String::from(v)));
+        self
+    }
+    pub fn with_is_numerical_suffix(mut self, b: bool) -> Self {
+        self.is_numerical_suffix = b;
+        self
+    }
+    fn parse_u64(s: &str, name: &str) -> Result<u64, Errors> {
+        match s.parse::<u64>() {
+            Ok(v) => Ok(v),
+            Err(e) => return Err(Errors::Arg(ArgumentError::new(name, &format!("parse error: {:?}", e))))
         }
     }
     pub fn from_arg_matches(matches: &clap::ArgMatches) -> Result<LineOptions, Errors> {
         let max_size = match matches.value_of("max-lines") {
-            Some(v) => match v.parse::<u64>() {
-                Ok(v) => v,
-                Err(e) => return Err(Errors::Arg(ArgumentError::new("max-size", &format!("parse error: {:?}", e))))
-            },
+            Some(v) => Self::parse_u64(v, "max-size")?,
             None => return Err(Errors::Arg(ArgumentError::new("max-size", "max-size is empty")))
         };
         let max_chars = match matches.value_of("max-chars") {
-            Some(v) => match v.parse::<u64>() {
-                Ok(v) => Some(v),
-                Err(e) => return Err(Errors::Arg(ArgumentError::new("max-chars", &format!("parse error: {:?}", e))))
-            },
+            Some(v) => Some(Self::parse_u64(v, "max-chars")?),
             None => None
         };
-
-        let prefix = matches.value_of("prefix").and_then(|v| Some(String::from(v)));
-        let input = matches.value_of("input").and_then(|v| Some(String::from(v)));
-        let output = matches.value_of("output").and_then(|v| Some(String::from(v)));
-        let encoding = matches.value_of("encoding").and_then(|v| Some(String::from(v)));
-        Ok(Self::new(max_size, max_chars, input, output, prefix, encoding))
+        Ok(Self::new(max_size).with_prefix(matches.value_of("prefix"))
+            .with_max_chars(max_chars)
+            .with_input(matches.value_of("input"))
+            .with_output(matches.value_of("output"))
+            .with_encoding(matches.value_of("encoding"))
+            .with_extra_suffix(matches.value_of("extra-suffix"))
+            .with_is_numerical_suffix(matches.is_present("numerical-suffix")))
+        // Ok(ret)
     }
 }
 
@@ -199,21 +253,59 @@ fn get_lines_from_buf(decoder: &mut Decoder, bytes: &[u8], is_cr: bool) -> Resul
     return Ok((readchars, lines, is_cr_found));
 }
 
-fn open_file(index: i32, prefix: &str, output_file_path: &mut std::path::PathBuf) -> Result<std::fs::File, Errors> {
-    output_file_path.set_file_name(format!("{}.{}", prefix, index));
+fn open_file(suffixstr: &mut String, prefix: &str, output_file_path: &mut std::path::PathBuf, is_numerical_suffix: bool, extra_suffix: &str) -> Result<std::fs::File, Errors> {
+    if suffixstr == "" {
+        suffixstr.push_str(match is_numerical_suffix { true => "0", false => "aa" });
+    }
+    let next_suffixstr = get_next_suffix(suffixstr, is_numerical_suffix);
+    output_file_path.set_file_name(format!("{}{}{}", prefix, suffixstr, extra_suffix));
     let output_file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .open(&output_file_path).or_else(|e| Err(Errors::from_io(&e, "in opening file")))?;
     output_file.set_len(0).or_else(|e| Err(Errors::from_io(&e, "truncating file")))?;
+    suffixstr.clear();
+    suffixstr.push_str(next_suffixstr.as_str());
     Ok(output_file)
 }
 
-fn rolling_file(index: &mut i32, prefix: &str, output_file_path: &mut std::path::PathBuf, availablelines: &mut u64, max_lines: u64) -> Result<std::fs::File, Errors> {
-    *index += 1;
-    output_file_path.set_file_name(format!("{}.{}", prefix, index));
+fn get_next_suffix(current_suffix: &str, is_numerical_suffix: bool) -> String {
+    let mut ret = String::new();
+    if !is_numerical_suffix {
+        let ztrimed = current_suffix.trim_start_matches("z");
+        let (processed, _ ) = ztrimed.chars().rev().fold((Vec::new() as Vec<char>, true), |(st, should_increment), item| {
+            let mut st = st;
+            if should_increment {
+                if item != 'z' {
+                    st.push((item as u8 + 1) as char);
+                    return (st, false);
+                } else {
+                    st.push('a');
+                    return (st, true);
+                }
+            } else {
+                st.push(item);
+                return (st, false);
+            }
+        });
+        for c in current_suffix.chars().take_while(|v| *v == 'z') {
+            ret.push(c);
+        }
+        ret.push_str(String::from_iter(processed.iter().rev()).as_str());
+        if processed[processed.len() - 1] == 'z' {
+            println!("pushing aa");
+            ret.push_str("aa");
+        }
+    } else {
+        let value = current_suffix.parse::<u64>().unwrap();
+        return format!("{}", value + 1);
+    }
+    ret
+}
+
+fn rolling_file(current_suffix: &mut String, prefix: &str, output_file_path: &mut std::path::PathBuf, availablelines: &mut u64, max_lines: u64, is_numerical: bool, extra_suffix: &str) -> Result<std::fs::File, Errors> {
     // output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::Io(e)))?;
-    let output_file = open_file(*index, &prefix, output_file_path)?;
+    let output_file = open_file(current_suffix, &prefix, output_file_path, is_numerical, extra_suffix)?;
     *availablelines = max_lines;
     Ok(output_file)
 }
@@ -238,14 +330,15 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
     };
     ensure_dir(&output_directory)?;
     let mut output_file_path = std::path::PathBuf::from(output_directory);
-    let mut index = 0;
-    let prefix = opts.prefix.clone().unwrap_or(String::from("bin"));
-    output_file_path.push(format!("{}.{}", prefix, index));
+    let prefix = opts.prefix.clone().unwrap_or(String::from("x"));
+    output_file_path.push(format!("{}.{}", prefix, ""));
     let (max_chars, is_max_chars_set) = match opts.max_chars {
         Some(v) => (v, true),
         None => (0, false)
     };
-    let mut output_file = open_file(index, &prefix, &mut output_file_path)?;
+    let mut current_suffix = String::new();
+    let extra_suffix = opts.extra_suffix.clone().unwrap_or(String::new());
+    let mut output_file = open_file(&mut current_suffix, &prefix, &mut output_file_path, opts.is_numerical_suffix, &extra_suffix)?;
     let mut buf = [0u8;1024];
     let mut readoffset = 0;
     let mut wbuf: Vec<u8> = Vec::new();
@@ -274,7 +367,8 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
                     charcount += 1;
                     if charcount >= max_chars as usize {
                         if availablelines == 0 {
-                            output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
+                            let next_output_file = rolling_file(&mut current_suffix, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines, opts.is_numerical_suffix, &extra_suffix)?;
+                            output_file = next_output_file;
                         }
                         wbuf.reserve(strbuf.len());
                         let (_, _, _) = encoder.encode_from_utf8_to_vec(&strbuf, &mut wbuf, false);
@@ -290,7 +384,8 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
                 }
                 if strbuf.len() != 0 && !is_line_ending(&strbuf) {
                     if availablelines == 0 {
-                        output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
+                        let next_output_file = rolling_file(&mut current_suffix, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines, opts.is_numerical_suffix, &extra_suffix)?;
+                        output_file = next_output_file;
                     }
                     wbuf.reserve(strbuf.len());
                     let (_, _, _) = encoder.encode_from_utf8_to_vec(&strbuf, &mut wbuf, false);
@@ -303,7 +398,8 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
                 }
             } else {
                 if availablelines == 0 {
-                    output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
+                    let next_output_file = rolling_file(&mut current_suffix, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines, opts.is_numerical_suffix, &extra_suffix)?;
+                    output_file = next_output_file;
                 }
                 wbuf.reserve(line.len());
                 let (_, _, _) = encoder.encode_from_utf8_to_vec(&line, &mut wbuf, false);
@@ -318,73 +414,23 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
     Ok(())
 }
 
-#[allow(dead_code)]
-fn split_text(opts: &LineOptions) -> Result<(), Errors> {
-    let input = get_file_or_stdin(&opts.input)?;
-    let mut reader = std::io::BufReader::new(input);
-    let mut line = String::new();
-    let mut availablelines = opts.max_lines;
-    let output_directory = match &opts.output {
-        Some(v) => std::path::PathBuf::from_str(v.as_str()).unwrap(),
-        None => std::env::current_dir().or_else(|e| Err(Errors::from_io(&e, "getting output_directory")))?
-    };
-    ensure_dir(&output_directory)?;
-    let mut output_file_path = std::path::PathBuf::from(output_directory);
-    let mut index = 0;
-    let prefix = opts.prefix.clone().unwrap_or(String::from("bin"));
-    output_file_path.push(format!("{}.{}", prefix, index));
-    line.reserve(4096);
-    let (max_chars, is_max_chars_set) = match opts.max_chars {
-        Some(v) => (v, true),
-        None => (0, false)
-    };
-    let mut output_file = open_file(index, &prefix, &mut output_file_path)?;
-    loop {
-        let read = reader.read_line(&mut line).or_else(|e| Err(Errors::from_io(&e, "reading line")))?;
-        if read == 0 {
-            break;
-        }
-        if availablelines == 0 {
-            output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
-        }
-        if is_max_chars_set {
-            let mut offset = 0;
-            loop {
-                let wlen = std::cmp::min(line.len() - offset, max_chars as usize);
-                output_file.write(line[offset..offset+wlen].as_bytes()).or_else(|e| Err(Errors::from_io(&e, "writing output file")))?;
-                offset += wlen;
-                availablelines -= 1;
-                if availablelines == 0 {
-                    output_file = rolling_file(&mut index, &prefix, &mut output_file_path, &mut availablelines, opts.max_lines)?;
-                }
-                if offset >= line.len() {
-                    break;
-                }
-            }
-            line.clear();
-        } else {
-            output_file.write(line.as_bytes()).or_else(|e| Err(Errors::from_io(&e, "writing output file")))?;
-            availablelines -= 1;
-            line.clear();
-        }
-    }
-    Ok(())
-}
-
 fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
     let mut input = get_file_or_stdin(&opts.input)?;
     let mut buf = [0u8;1024];
-    let curdir = std::env::current_dir().or_else(|e| Err(Errors::from_io(&e, "getting current directory")))?;
     let output_directory = match &opts.output {
         Some(v) => std::path::PathBuf::from(v),
-        None => curdir
+        None => match std::env::current_dir().or_else(|e| Err(Errors::from_io(&e, "getting current directory"))) {
+            Ok(v) => v,
+            Err(e) => return Err(e)
+        }
     };
     ensure_dir(&output_directory)?;
-    let prefix = opts.prefix.clone().unwrap_or(String::from("bin"));
+    let prefix = opts.prefix.clone().unwrap_or(String::from("x"));
     let mut output_file_path = output_directory.to_path_buf();
-    let mut file_index = 0;
-    output_file_path.push(format!("{}.{}", prefix, file_index));
-    let mut output_file = std::fs::File::create(output_file_path.to_owned()).or_else(|e| Err(Errors::from_io(&e, "creating output file")))?;
+    output_file_path.push(format!("{}.{}", prefix, ""));
+    let mut current_suffix = String::new();
+    let extra_suffix = opts.extra_suffix.clone().unwrap_or_default();
+    let mut output_file = open_file(&mut current_suffix, &prefix, &mut output_file_path, opts.is_numerical_suffix, &extra_suffix)?;
     let mut available = opts.max_size;
     loop {
         let bytesread = input.read(&mut buf).or_else(|e| Err(Errors::from_io(&e, "reading from input file")))?;
@@ -398,7 +444,8 @@ fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
             remaining -= bytesavailable;
             available -= bytesavailable as u64;
             if available == 0 && remaining != 0 {
-                output_file = rolling_file(&mut file_index, &prefix, &mut output_file_path, &mut available, opts.max_size)?;
+                let next_output_file = rolling_file(&mut current_suffix, &prefix, &mut output_file_path, &mut available, opts.max_size, opts.is_numerical_suffix, &extra_suffix)?;
+                output_file = next_output_file;
             }
         }
     }
@@ -420,7 +467,22 @@ fn create_prefix_option<'a, 'b>() -> Arg<'a, 'b> {
         .short("p")
         .long("prefix")
         .takes_value(true)
-        .help("output file prefix(default: using filename when filename can be used, or \"bin\" will be used)")
+        .help("output file prefix(default: using filename when filename can be used, or \"x\" will be used)")
+}
+
+fn create_numeric_suffix_option<'a, 'b>() -> Arg<'a, 'b> {
+    Arg::with_name("numerical-suffix")
+        .short("n")
+        .long("numerical-suffix")
+        .takes_value(false)
+        .help("add numerical suffix('0', '1',...) to output file(default: 'aa', 'ab',...)")
+}
+
+fn create_extra_suffix_option<'a, 'b>() -> Arg<'a, 'b> {
+    Arg::with_name("extra-suffix")
+        .long("extra-suffix")
+        .takes_value(true)
+        .help("add extra suffix to output file")
 }
 
 fn create_binary_subcommand<'a, 'b>() -> App<'a, 'b> {
@@ -431,6 +493,8 @@ fn create_binary_subcommand<'a, 'b>() -> App<'a, 'b> {
             .arg(create_input_option())
             .arg(create_output_option())
             .arg(create_prefix_option())
+            .arg(create_numeric_suffix_option())
+            .arg(create_extra_suffix_option())
 }
 
 fn create_text_subcommand<'a, 'b>() -> App<'a, 'b> {
@@ -443,6 +507,8 @@ fn create_text_subcommand<'a, 'b>() -> App<'a, 'b> {
             .arg(create_input_option())
             .arg(create_output_option())
             .arg(create_prefix_option())
+            .arg(create_numeric_suffix_option())
+            .arg(create_extra_suffix_option())
 }
 
 fn main() -> Result<(), Errors>{
