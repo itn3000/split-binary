@@ -512,7 +512,7 @@ fn create_text_subcommand<'a, 'b>() -> App<'a, 'b> {
 }
 
 fn main() -> Result<(), Errors>{
-    let app = App::new("dbin")
+    let app = App::new("bsp")
         .version("0.1.0")
         .author("itn3000")
         .about("binary/text splitter")
