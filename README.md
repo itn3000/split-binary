@@ -1,6 +1,6 @@
 # Tool for splitting binary
 
-[![https://img.shields.io/github/downloads/itn3000/split-binary/total]](https://github.com/itn3000/split-binary/releases)
+[![release](https://img.shields.io/github/downloads/itn3000/split-binary/total)](https://github.com/itn3000/split-binary/releases)
 
 This tool helps splitting binary
 
