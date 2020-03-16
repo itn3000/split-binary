@@ -46,7 +46,7 @@ jobs:
     name: "build binary"
     steps:
       - name: "installing musl tools"
-        run: "apt-get install -y musl-dev musl-tools"
+        run: "sudo apt-get install -y musl-dev musl-tools"
         if: ${{ matrix.os }} == 'ubuntu-18.04'
       - name: "checkout-repo"
         uses: "actions/checkout@v1"
