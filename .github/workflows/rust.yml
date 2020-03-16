@@ -64,6 +64,7 @@ jobs:
     runs-on: "ubuntu-18.04"
     name: "release binary"
     if: startsWith(github.ref, 'refs/tags')
+    needs: build
     steps:
       - uses: actions/checkout@v1
       - name: "downloading windows binary"
