@@ -45,19 +45,20 @@ jobs:
     runs-on: "${{ matrix.os }}"
     name: "build binary"
     steps:
+      - name: "installing musl tools"
+        run: "apt-get install -y musl-dev musl-tools"
+        if: ${{ matrix.os }} == 'ubuntu-18.04'
       - name: "checkout-repo"
         uses: "actions/checkout@v1"
       - name: "ensure toolchain"
         run: rustup toolchain install stable-${{ matrix.triplet }}
-      - name: "set default toolchain"
-        run: rustup default stable-${{ matrix.triplet }}
       - name: "build-release-binary"
-        run: cargo build --release
+        run: cargo build --release --target=${{ matrix.triplet }}
       - name: "collect-binary"
         uses: "actions/upload-artifact@v1"
         with:
           name: "bin-${{ matrix.triplet }}"
-          path: "target/release/${{ matrix.binname }}"
+          path: "target/${{ matrix.triplet }}/release/${{ matrix.binname }}"
       - name: "collect-pdb"
         uses: "actions/upload-artifact@v1"
         with:
