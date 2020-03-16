@@ -6,7 +6,7 @@ on:
       - "*"
 env:
   WIN64_TRIPLET: "x86_64-pc-windows-msvc"
-  LINUX64_TRIPLET: "x86_64-unknown-linux-musl"
+  LINUX64_TRIPLET: "x86_64-unknown-linux-gnu"
   MAC64_TRIPLET: "x86_64-apple-darwin"
 jobs:
   build:
