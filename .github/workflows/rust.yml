@@ -15,6 +15,10 @@ jobs:
         binname:
           - "bsp"
           - "bsp.exe"
+        triplet:
+          - "x86_64-pc-windows-msvc"
+          - "x86_64-unknown-linux-gnu"
+          - "x86_64-apple-darwin"
         exclude:
           - os: "windows-2019"
             binname: "bsp"
@@ -22,6 +26,18 @@ jobs:
             binname: "bsp.exe"
           - os: "macos-latest"
             binname: "bsp.exe"
+          - os: "windows-2019"
+            triplet: "x86_64-unknown-linux-gnu"
+          - os: "windows-2019"
+            triplet: "x86_64-apple-darwin"
+          - os: "ubuntu-18.04"
+            triplet: "x86_64-pc-windows-msvc"
+          - os: "ubuntu-18.04"
+            triplet: "x86_64-apple-darwin"
+          - os: "macos-latest"
+            triplet: "x86_64-pc-windows-msvc"
+          - os: "macos-latest"
+            triplet: "x86_64-unknown-linux-gnu"
     runs-on: "${{ matrix.os }}"
     name: "build binary"
     steps:
@@ -32,7 +48,7 @@ jobs:
       - name: "collect-binary"
         uses: "actions/upload-artifact@v1"
         with:
-          name: "binary-${{ matrix.os }}"
+          name: "bin-${{ matrix.triplet }}"
           path: "target/release/${{ matrix.binname }}"
       - name: "collect-pdb"
         uses: "actions/upload-artifact@v1"
