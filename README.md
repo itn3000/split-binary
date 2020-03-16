@@ -1,12 +1,14 @@
 # Tool for splitting binary
 
+[![https://img.shields.io/github/downloads/itn3000/split-binary/total]](https://github.com/itn3000/split-binary/releases)
+
 This tool helps splitting binary
 
 # Usage
 
 ## Getting binary
 
-Download binary from release page.
+Download binary from [release page](https://github.com/itn3000/split-binary/releases).
 you can use this as single binary.
 
 ## Command Help
