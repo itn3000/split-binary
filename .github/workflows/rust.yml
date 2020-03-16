@@ -4,6 +4,10 @@ on:
       - master
     tags:
       - "*"
+env:
+  WIN64_TRIPLET: "x86_64-pc-windows-msvc"
+  LINUX64_TRIPLET: "x86_64-unknown-linux-gnu"
+  MAC64_TRIPLET: "x86_64-apple-darwin"
 jobs:
   build:
     strategy:
@@ -16,9 +20,9 @@ jobs:
           - "bsp"
           - "bsp.exe"
         triplet:
-          - "x86_64-pc-windows-msvc"
-          - "x86_64-unknown-linux-gnu"
-          - "x86_64-apple-darwin"
+          - "${{ env.WIN64_TRIPLET }}"
+          - "${{ env.LINUX64_TRIPLET }}"
+          - "${{ env.MAC64_TRIPLET }}"
         exclude:
           - os: "windows-2019"
             binname: "bsp"
@@ -27,17 +31,17 @@ jobs:
           - os: "macos-latest"
             binname: "bsp.exe"
           - os: "windows-2019"
-            triplet: "x86_64-unknown-linux-gnu"
+            triplet: "${{ env.LINUX64_TRIPLET }}"
           - os: "windows-2019"
-            triplet: "x86_64-apple-darwin"
+            triplet: "${{ env.MAC64_TRIPLET }}"
           - os: "ubuntu-18.04"
-            triplet: "x86_64-pc-windows-msvc"
+            triplet: "${{ env.WIN64_TRIPLET }}"
           - os: "ubuntu-18.04"
-            triplet: "x86_64-apple-darwin"
+            triplet: "${{ env.MAC64_TRIPLET }}"
           - os: "macos-latest"
-            triplet: "x86_64-pc-windows-msvc"
+            triplet: "${{ env.WIN64_TRIPLET }}"
           - os: "macos-latest"
-            triplet: "x86_64-unknown-linux-gnu"
+            triplet: "${{ env.LINUX64_TRIPLET }}"
     runs-on: "${{ matrix.os }}"
     name: "build binary"
     steps:
@@ -53,8 +57,76 @@ jobs:
       - name: "collect-pdb"
         uses: "actions/upload-artifact@v1"
         with:
-          name: "pdb-${{ matrix.os }}"
+          name: "pdb-${{ matrix.triplet }}"
           path: "target/release/bsp.pdb"
         if: matrix.os == 'windows-2019'
-        
-    
+  release:
+    runs-on: "ubuntu-18.04"
+    name: "release binary"
+    if: startsWith(github.ref, 'refs/tags')
+    steps:
+      - uses: actions/checkout@v1
+      - name: "downloading windows binary"
+        uses: actions/download-artifact@v1
+        with:
+          name: "bin-${{ env.WIN64_TRIPLET }}"
+          path: "bin-${{ env.WIN64_TRIPLET }}"
+      - name: "downloading windows pdb"
+        uses: actions/download-artifact@v1
+        with:
+          name: "pdb-${{ env.WIN64_TRIPLET }}"
+          path: "pdb-${{ env.WIN64_TRIPLET }}"
+      - name: "downloading linux binary"
+        uses: actions/download-artifact@v1
+        with:
+          name: "bin-${{ env.LINUX64_TRIPLET }}"
+          path: "bin-${{ env.LINUX64_TRIPLET }}"
+      - name: "downloading mac binary"
+        uses: actions/download-artifact@v1
+        with:
+          name: "bin-${{ env.MAC64_TRIPLET }}"
+          path: "bin-${{ env.MAC64_TRIPLET }}"
+      - name: "creating github release"
+        uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          draft: true
+          prerelease: false
+          release_name: "Release ${{github.ref}}"
+      - name: "uploading windows release asset"
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        with:
+          upload_url: "${{ steps.create_release.outputs.upload_url }}"
+          asset_path: "bin-${{ env.WIN64_TRIPLET }}/bsp.exe"
+          asset_name: bsp.exe-${{ env.WIN64_TRIPLET }}
+          asset_content_type: application/octet-binary
+      - name: "uploading windows pdb release asset"
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        with:
+          upload_url: "${{ steps.create_release.outputs.upload_url }}"
+          asset_path: "pdb-${{ env.WIN64_TRIPLET }}/bsp.pdb"
+          asset_name: bsp.pdb
+          asset_content_type: application/octet-binary
+      - name: "uploading linux release asset"
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        with:
+          upload_url: "${{ steps.create_release.outputs.upload_url }}"
+          asset_path: "bin-${{ env.LINUX64_TRIPLET }}/bsp"
+          asset_name: bsp-${{ env.LINUX64_TRIPLET }}
+          asset_content_type: application/octet-binary
+      - name: "uploading mac release asset"
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        with:
+          upload_url: "${{ steps.create_release.outputs.upload_url }}"
+          asset_path: "bin-${{ env.MAC64_TRIPLET }}/bsp"
+          asset_name: bsp-${{ env.MAC64_TRIPLET }}
+          asset_content_type: application/octet-binary
