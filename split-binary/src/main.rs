@@ -523,11 +523,9 @@ fn main() -> Result<(), Errors>{
     if let Some(matches) = matches.subcommand_matches("text") {
         // process as text
         let opts = LineOptions::from_arg_matches(matches)?;
-        println!("{:?}", opts);
         split_text_encoding(&opts)?;
     } else if let Some(matches) = matches.subcommand_matches("binary") {
         let opts = BinaryOptions::from_arg_matches(&matches)?;
-        println!("{:?}", opts);
         split_binary(&opts)?;
     } else {
         println!("{}", matches.usage());
