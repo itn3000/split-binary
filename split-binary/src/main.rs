@@ -213,8 +213,6 @@ impl std::error::Error for ArgumentError {}
 enum Errors {
     Io(std::io::Error),
     Arg(ArgumentError),
-    GlobPattern(glob::PatternError),
-    Glob(glob::GlobError),
 }
 
 impl Errors {
@@ -223,12 +221,6 @@ impl Errors {
             e.kind(),
             format!("{}: {:?}", prefix, e),
         ))
-    }
-    pub fn from_glob_pattern(e: glob::PatternError) -> Errors {
-        Errors::GlobPattern(e)
-    }
-    pub fn from_glob(e: glob::GlobError) -> Self {
-        Errors::Glob(e)
     }
 }
 
@@ -699,9 +691,20 @@ fn create_text_subcommand<'a, 'b>() -> App<'a, 'b> {
 fn create_combine_subcommand<'a, 'b>() -> App<'a, 'b> {
     SubCommand::with_name("combine")
         .alias("c")
-        .about("combine data")
-        .arg(Arg::with_name("output").value_name("OUTPUT").alias("o").short("o").long("output"))
-        .arg(Arg::with_name("input").required(true).multiple(true))
+        .about("combine file data")
+        .arg(
+            Arg::with_name("output")
+                .value_name("OUTPUT")
+                .alias("o")
+                .short("o")
+                .long("output")
+                .long_help("output file path, if empty, write to stdout"),
+        )
+        .arg(
+            Arg::with_name("input")
+                .multiple(true)
+                .long_help("input files(if empty, read file list from stdin)"),
+        )
 }
 
 struct CombineBinaryOptions {
@@ -726,49 +729,79 @@ fn get_stdout_or_file(path: &Option<String>) -> Result<StdoutOrFile, Errors> {
     if let Some(s) = path {
         match std::fs::OpenOptions::new().create(true).write(true).open(s) {
             Ok(f) => Ok(StdoutOrFile::File(f)),
-            Err(e) => Err(Errors::from_io(&e, "failed to create output file"))
+            Err(e) => Err(Errors::from_io(&e, "failed to create output file")),
         }
     } else {
         Ok(StdoutOrFile::Stdout(std::io::stdout()))
     }
 }
 
+fn transfer_file_content<W>(p: &std::path::Path, output: &mut W) -> Result<(), Errors>
+where
+    W: std::io::Write,
+{
+    let mut f = match std::fs::File::open(p) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(Errors::from_io(
+                &e,
+                format!("failed to read source file: {:?}", p).as_str(),
+            ))
+        }
+    };
+    copy_content(&mut f, output)?;
+    Ok(())
+}
+
+fn copy_content<R, W>(io_in: &mut R, io_out: &mut W) -> Result<(), Errors>
+where
+    R: std::io::Read,
+    W: std::io::Write,
+{
+    let mut buf = [0u8; 4096];
+    loop {
+        let bytesread = match io_in.read(&mut buf) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(Errors::from_io(
+                    &e,
+                    format!("failed to raed source file content").as_str(),
+                ))
+            }
+        };
+        if bytesread == 0 {
+            break;
+        }
+        match io_out.write(&buf[0..bytesread]) {
+            Ok(_) => (),
+            Err(e) => return Err(Errors::from_io(&e, "failed to write to output")),
+        };
+    }
+    Ok(())
+}
+
 fn combine_binaries(opts: &CombineBinaryOptions) -> Result<(), Errors> {
     let mut output = match get_stdout_or_file(&opts.output) {
         Ok(v) => v,
-        Err(e) => return Err(e)
+        Err(e) => return Err(e),
     };
-    let mut buf = [0u8;4096];
-    for pathpattern in opts.paths.iter() {
-        match glob::glob(pathpattern) {
-            Ok(v) => {
-                for p in v {
-                    let p = match p {
-                        Ok(v) => v,
-                        Err(e) => return Err(Errors::from_glob(e))
-                    };
-                    let mut f = match std::fs::File::open(p) {
-                        Ok(v) => v,
-                        Err(e) => return Err(Errors::Io(e))
-                    };
-                    loop {
-                        let bytesread = match f.read(&mut buf) {
-                            Ok(v) => v,
-                            Err(e) => return Err(Errors::Io(e))
-                        };
-                        if bytesread == 0 {
-                            break
-                        }
-                        match output.write(&buf[0..bytesread]) {
-                            Ok(_) => (),
-                            Err(e) => return Err(Errors::Io(e))
-                        };
-                    }
-                }
-            },
-            Err(e) => {
-                return Err(Errors::from_glob_pattern(e))
+    if opts.paths.is_empty() {
+        let sin = std::io::stdin();
+        let mut pathbuf = String::new();
+        loop {
+            match sin.read_line(&mut pathbuf) {
+                Ok(v) => v,
+                Err(e) => return Err(Errors::from_io(&e, "failed to source file path from stdin")),
+            };
+            if pathbuf.is_empty() {
+                break;
             }
+            transfer_file_content(std::path::Path::new(&pathbuf.trim()), &mut output)?;
+            pathbuf.clear();
+        }
+    } else {
+        for pathpattern in opts.paths.iter() {
+            transfer_file_content(std::path::Path::new(pathpattern.trim()), &mut output)?;
         }
     }
     Ok(())

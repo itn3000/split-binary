@@ -14,7 +14,7 @@ you can use this as single binary.
 ## Command Help
 
 you can get help by `bsp --help` or `bsp [subcommand] --help`.
-Available subcommands are `text(short format:"t")` `binary(short format: "b")`.
+Available subcommands are `text(short format:"t")` `binary(short format: "b")` `combine(short format: "c")`.
 
 # Development
 
