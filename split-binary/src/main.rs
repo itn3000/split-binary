@@ -322,6 +322,7 @@ fn open_file(
     let output_file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(true)
         .open(&output_file_path)
         .or_else(|e| Err(Errors::from_io(&e, "in opening file")))?;
     output_file
@@ -578,13 +579,15 @@ fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
             break;
         }
         let mut remaining = bytesread;
+        let mut offset = 0usize;
         while remaining > 0 {
             let bytesavailable = std::cmp::min(remaining as usize, available as usize);
             output_file
-                .write(&buf[0..bytesavailable])
+                .write(&buf[offset..offset + bytesavailable])
                 .or_else(|e| Err(Errors::from_io(&e, "writing output file")))?;
             remaining -= bytesavailable;
             available -= bytesavailable as u64;
+            offset += bytesavailable;
             if available == 0 && remaining != 0 {
                 let next_output_file = rolling_file(
                     &mut current_suffix,
@@ -597,6 +600,7 @@ fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
                 )?;
                 output_file = next_output_file;
             }
+            eprintln!("remaining = {}, available = {}, offset = {}", remaining, available, offset);
         }
     }
     Ok(())
@@ -705,11 +709,17 @@ fn create_combine_subcommand<'a, 'b>() -> App<'a, 'b> {
                 .multiple(true)
                 .long_help("input files(if empty, read file list from stdin)"),
         )
+        .arg(
+            Arg::with_name("notruncate")
+                .long_help("no truncate when file already exists")
+                .takes_value(false)
+        )
 }
 
 struct CombineBinaryOptions {
     pub paths: Vec<String>,
     pub output: Option<String>,
+    pub no_truncate: bool,
 }
 
 impl CombineBinaryOptions {
@@ -721,13 +731,14 @@ impl CombineBinaryOptions {
         Ok(CombineBinaryOptions {
             paths: paths,
             output: matches.value_of("output").and_then(|x| Some(x.to_owned())),
+            no_truncate: matches.is_present("notruncate"),
         })
     }
 }
 
-fn get_stdout_or_file(path: &Option<String>) -> Result<StdoutOrFile, Errors> {
+fn get_stdout_or_file(path: &Option<String>, no_truncate: bool) -> Result<StdoutOrFile, Errors> {
     if let Some(s) = path {
-        match std::fs::OpenOptions::new().create(true).write(true).open(s) {
+        match std::fs::OpenOptions::new().create(true).truncate(!no_truncate).write(true).open(s) {
             Ok(f) => Ok(StdoutOrFile::File(f)),
             Err(e) => Err(Errors::from_io(&e, "failed to create output file")),
         }
@@ -781,7 +792,7 @@ where
 }
 
 fn combine_binaries(opts: &CombineBinaryOptions) -> Result<(), Errors> {
-    let mut output = match get_stdout_or_file(&opts.output) {
+    let mut output = match get_stdout_or_file(&opts.output, opts.no_truncate) {
         Ok(v) => v,
         Err(e) => return Err(e),
     };
