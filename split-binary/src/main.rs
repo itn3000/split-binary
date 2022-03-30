@@ -711,6 +711,7 @@ fn create_combine_subcommand<'a, 'b>() -> App<'a, 'b> {
         )
         .arg(
             Arg::with_name("notruncate")
+                .long("notruncate")
                 .long_help("no truncate when file already exists")
                 .takes_value(false)
         )
