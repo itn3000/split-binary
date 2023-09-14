@@ -17,6 +17,7 @@ struct BinaryOptions {
     pub prefix: Option<String>,
     pub extra_suffix: Option<String>,
     pub is_numerical_suffix: bool,
+    pub buffer_size: Option<usize>,
 }
 
 enum StdoutOrFile {
@@ -73,6 +74,16 @@ impl BinaryOptions {
         self.is_numerical_suffix = b;
         self
     }
+    pub fn with_buffer_size(mut self, s: Option<&str>) -> Self {
+        self.buffer_size = match s {
+            Some(v) => match usize::from_str(v) {
+                Ok(x) => Some(x),
+                Err(_) => None,
+            },
+            None => None
+        };
+        self
+    }
     fn from_arg_matches(matches: &clap::ArgMatches) -> Result<BinaryOptions, Errors> {
         let max_size = match matches.value_of("max-size") {
             Some(v) => match v.parse::<u64>() {
@@ -96,7 +107,9 @@ impl BinaryOptions {
             .with_output(matches.value_of("output"))
             .with_prefix(matches.value_of("prefix"))
             .with_extra_suffix(matches.value_of("extra-suffix"))
-            .with_is_numerical_suffix(matches.is_present("numerical-suffix")));
+            .with_is_numerical_suffix(matches.is_present("numerical-suffix"))
+            .with_buffer_size(matches.value_of("buffer-size"))
+        );
     }
 }
 
@@ -212,6 +225,8 @@ impl std::error::Error for ArgumentError {}
 #[derive(Debug)]
 enum Errors {
     Io(std::io::Error),
+    Glob(glob::GlobError),
+    Pattern(glob::PatternError),
     Arg(ArgumentError),
 }
 
@@ -547,7 +562,9 @@ fn split_text_encoding(opts: &LineOptions) -> Result<(), Errors> {
 
 fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
     let mut input = get_file_or_stdin(&opts.input)?;
-    let mut buf = [0u8; 1024];
+    let buffer_size = opts.buffer_size.unwrap_or(1024usize);
+    let mut buf = Vec::<u8>::with_capacity(buffer_size);
+    buf.resize(buffer_size, 0);
     let output_directory = match &opts.output {
         Some(v) => std::path::PathBuf::from(v),
         None => match std::env::current_dir()
@@ -599,8 +616,8 @@ fn split_binary(opts: &BinaryOptions) -> Result<(), Errors> {
                     &extra_suffix,
                 )?;
                 output_file = next_output_file;
+                eprintln!("next suffix = {}", current_suffix);
             }
-            eprintln!("remaining = {}, available = {}, offset = {}", remaining, available, offset);
         }
     }
     Ok(())
@@ -645,6 +662,14 @@ fn create_extra_suffix_option<'a, 'b>() -> Arg<'a, 'b> {
         .help("add extra suffix to output file")
 }
 
+fn create_buffer_size_option<'a, 'b>() -> Arg<'a, 'b> {
+    Arg::with_name("buffer-size")
+        .long("buffer-size")
+        .takes_value(true)
+        .help("buffer size")
+        .default_value("1024")
+}
+
 fn create_binary_subcommand<'a, 'b>() -> App<'a, 'b> {
     SubCommand::with_name("binary")
         .alias("b")
@@ -660,6 +685,7 @@ fn create_binary_subcommand<'a, 'b>() -> App<'a, 'b> {
         .arg(create_prefix_option())
         .arg(create_numeric_suffix_option())
         .arg(create_extra_suffix_option())
+        .arg(create_buffer_size_option())
 }
 
 fn create_text_subcommand<'a, 'b>() -> App<'a, 'b> {
@@ -707,7 +733,7 @@ fn create_combine_subcommand<'a, 'b>() -> App<'a, 'b> {
         .arg(
             Arg::with_name("input")
                 .multiple(true)
-                .long_help("input files(if empty, read file list from stdin)"),
+                .long_help("input files(if empty, read file list from stdin, glob pattern is OK)"),
         )
         .arg(
             Arg::with_name("notruncate")
@@ -813,7 +839,17 @@ fn combine_binaries(opts: &CombineBinaryOptions) -> Result<(), Errors> {
         }
     } else {
         for pathpattern in opts.paths.iter() {
-            transfer_file_content(std::path::Path::new(pathpattern.trim()), &mut output)?;
+            for entry in glob::glob(pathpattern).map_err(|e| Errors::Pattern(e))? {
+                match entry {
+                    Ok(v) => {
+                        transfer_file_content(&v, &mut output)?;
+                    },
+                    Err(e) => {
+                        return Err(Errors::Glob(e));
+                    }
+                }
+                // transfer_file_content(std::path::Path::new(pathpattern.trim()), &mut output)?;
+            }
         }
     }
     Ok(())
