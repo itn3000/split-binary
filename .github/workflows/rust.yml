@@ -14,7 +14,7 @@ jobs:
       matrix:
         os:
           - "windows-2019"
-          - "ubuntu-18.04"
+          - "ubuntu-20.04"
           - "macos-latest"
         binname:
           - "bsp"
@@ -26,7 +26,7 @@ jobs:
         exclude:
           - os: "windows-2019"
             binname: "bsp"
-          - os: "ubuntu-18.04"
+          - os: "ubuntu-20.04"
             binname: "bsp.exe"
           - os: "macos-latest"
             binname: "bsp.exe"
@@ -34,9 +34,9 @@ jobs:
             triplet: "x86_64-unknown-linux-musl"
           - os: "windows-2019"
             triplet: "x86_64-apple-darwin"
-          - os: "ubuntu-18.04"
+          - os: "ubuntu-20.04"
             triplet: "x86_64-pc-windows-msvc"
-          - os: "ubuntu-18.04"
+          - os: "ubuntu-20.04"
             triplet: "x86_64-apple-darwin"
           - os: "macos-latest"
             triplet: "x86_64-pc-windows-msvc"
@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: "installing musl tools"
         run: "sudo apt-get install -y musl-dev musl-tools"
-        if: matrix.os == 'ubuntu-18.04'
+        if: matrix.os == 'ubuntu-20.04'
       - name: "checkout-repo"
         uses: "actions/checkout@v1"
       - name: "ensure toolchain"
@@ -56,7 +56,7 @@ jobs:
         run: cargo build --release --target=${{ matrix.triplet }}
       - name: "strip-binary"
         run: "strip target/${{ matrix.triplet }}/release/${{ matrix.binname }}"
-        if: matrix.os == 'ubuntu-18.04'
+        if: matrix.os == 'ubuntu-20.04'
       - name: "collect-binary"
         uses: "actions/upload-artifact@v1"
         with:
@@ -69,7 +69,7 @@ jobs:
           path: "target/${{matrix.triplet}}/release/bsp.pdb"
         if: matrix.os == 'windows-2019'
   release:
-    runs-on: "ubuntu-18.04"
+    runs-on: "ubuntu-20.04"
     name: "release binary"
     if: startsWith(github.ref, 'refs/tags')
     needs: build
